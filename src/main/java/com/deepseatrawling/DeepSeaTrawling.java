@@ -16,6 +16,7 @@ import net.runelite.client.Notifier;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.events.ConfigChanged;
+import net.runelite.client.events.RuneScapeProfileChanged;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
 import net.runelite.client.ui.overlay.OverlayManager;
@@ -549,7 +550,9 @@ public class DeepSeaTrawling extends Plugin
     }
 
     @Subscribe
-    public void onAccountHashChanged(AccountHashChanged e) {
+    public void onRuneScapeProfileChanged(RuneScapeProfileChanged e) {
+        // Fired after the config manager has switched to the new account's profile,
+        // so the counts read here are always that account's own.
         loadFishCounts();
     }
 
@@ -838,9 +841,9 @@ public class DeepSeaTrawling extends Plugin
 						infoBoxManager.removeInfoBox(infoBox);
 					}
 					fishCatchInfoBoxes.clear();
-					configManager.unsetConfiguration(CONFIG_GROUP, FISH_COUNTS_KEY);
-					configManager.unsetConfiguration(CONFIG_GROUP, FISH_HOLD_COUNTS_KEY);
-					configManager.unsetConfiguration(CONFIG_GROUP, FISH_INVENTORY_COUNTS_KEY);
+					configManager.unsetRSProfileConfiguration(CONFIG_GROUP, FISH_COUNTS_KEY);
+					configManager.unsetRSProfileConfiguration(CONFIG_GROUP, FISH_HOLD_COUNTS_KEY);
+					configManager.unsetRSProfileConfiguration(CONFIG_GROUP, FISH_INVENTORY_COUNTS_KEY);
 				}
 				break;
 			case VarbitID.SAILING_SIDEPANEL_BOAT_TRAWLING_NET_0_DEPTH:
@@ -1090,6 +1093,8 @@ public class DeepSeaTrawling extends Plugin
     }
 
     private void saveFishCounts() {
+        if (configManager.getRSProfileKey() == null) return;
+
         Map<String, Integer> counts = new HashMap<>();
         Map<String, Integer> holdCounts = new HashMap<>();
         Map<String, Integer> inventoryCounts = new HashMap<>();
@@ -1098,33 +1103,37 @@ public class DeepSeaTrawling extends Plugin
             holdCounts.put(entry.getKey(), entry.getValue().getHoldCount());
             inventoryCounts.put(entry.getKey(), entry.getValue().getInventoryCount());
         }
-        configManager.setConfiguration(CONFIG_GROUP, FISH_COUNTS_KEY, gson.toJson(counts));
-        configManager.setConfiguration(CONFIG_GROUP, FISH_HOLD_COUNTS_KEY, gson.toJson(holdCounts));
-        configManager.setConfiguration(CONFIG_GROUP, FISH_INVENTORY_COUNTS_KEY, gson.toJson(inventoryCounts));
+        configManager.setRSProfileConfiguration(CONFIG_GROUP, FISH_COUNTS_KEY, gson.toJson(counts));
+        configManager.setRSProfileConfiguration(CONFIG_GROUP, FISH_HOLD_COUNTS_KEY, gson.toJson(holdCounts));
+        configManager.setRSProfileConfiguration(CONFIG_GROUP, FISH_INVENTORY_COUNTS_KEY, gson.toJson(inventoryCounts));
         log.debug("Saved fish counts: {} hold: {} inventory: {}", counts, holdCounts, inventoryCounts);
     }
 
     private void loadFishCounts() {
-        String json = configManager.getConfiguration(CONFIG_GROUP, FISH_COUNTS_KEY);
+        // Clear any existing boxes first, so another account's counts never stay on screen
+        // and loading again does not create duplicates
+        for (FishCatchInfoBox infoBox : fishCatchInfoBoxes.values()) {
+            infoBoxManager.removeInfoBox(infoBox);
+        }
+        fishCatchInfoBoxes.clear();
+
+        if (configManager.getRSProfileKey() == null) return;
+        migrateGlobalFishCounts();
+
+        String json = configManager.getRSProfileConfiguration(CONFIG_GROUP, FISH_COUNTS_KEY);
         if (json == null) return;
 
         Type type = new TypeToken<Map<String, Integer>>(){}.getType();
         Map<String, Integer> counts = gson.fromJson(json, type);
         if (counts == null) return;
 
-        String holdJson = configManager.getConfiguration(CONFIG_GROUP, FISH_HOLD_COUNTS_KEY);
+        String holdJson = configManager.getRSProfileConfiguration(CONFIG_GROUP, FISH_HOLD_COUNTS_KEY);
         Map<String, Integer> holdCounts = holdJson != null ? gson.fromJson(holdJson, type) : new HashMap<>();
         if (holdCounts == null) holdCounts = new HashMap<>();
 
-        String inventoryJson = configManager.getConfiguration(CONFIG_GROUP, FISH_INVENTORY_COUNTS_KEY);
+        String inventoryJson = configManager.getRSProfileConfiguration(CONFIG_GROUP, FISH_INVENTORY_COUNTS_KEY);
         Map<String, Integer> inventoryCounts = inventoryJson != null ? gson.fromJson(inventoryJson, type) : new HashMap<>();
         if (inventoryCounts == null) inventoryCounts = new HashMap<>();
-
-        // Clear any existing boxes before loading to avoid duplicates getting created
-        for (FishCatchInfoBox infoBox : fishCatchInfoBoxes.values()) {
-            infoBoxManager.removeInfoBox(infoBox);
-        }
-        fishCatchInfoBoxes.clear();
 
         for (Map.Entry<String, Integer> entry : counts.entrySet()) {
             String fishName = entry.getKey();
@@ -1144,6 +1153,21 @@ public class DeepSeaTrawling extends Plugin
             infoBoxManager.addInfoBox(infoBox);
         }
         log.debug("Loaded fish counts: {} hold: {} inventory: {}", counts, holdCounts, inventoryCounts);
+    }
+
+    // Counts used to be saved once for every account. Hand any left over to the first account
+    // that loads, then remove them, so they can never show up on another account.
+    private void migrateGlobalFishCounts() {
+        String[] keys = {FISH_COUNTS_KEY, FISH_HOLD_COUNTS_KEY, FISH_INVENTORY_COUNTS_KEY};
+        boolean hasProfileCounts = configManager.getRSProfileConfiguration(CONFIG_GROUP, FISH_COUNTS_KEY) != null;
+        for (String key : keys) {
+            String legacy = configManager.getConfiguration(CONFIG_GROUP, key);
+            if (legacy == null) continue;
+            if (!hasProfileCounts) {
+                configManager.setRSProfileConfiguration(CONFIG_GROUP, key, legacy);
+            }
+            configManager.unsetConfiguration(CONFIG_GROUP, key);
+        }
     }
 
     private void updateNearestShoalSticky() {
