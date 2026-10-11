@@ -1,5 +1,6 @@
 package com.deepseatrawling;
 
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
@@ -42,5 +43,17 @@ public class FishCountThresholdTest
 		// Reached at 151, some taken out down to 20, then the nets fill past 150 again
 		assertTrue(DeepSeaTrawling.reachedFishCountThreshold(149, 151, 150, NETS));
 		assertTrue(DeepSeaTrawling.reachedFishCountThreshold(148, 151, 150, NETS));
+	}
+
+	@Test
+	public void messageNamesTheChosenCountAndTheTotal()
+	{
+		assertEquals("Trawling net(s) reached 150 fish (152 now)!", DeepSeaTrawling.fishCountMessage(150, 152));
+	}
+
+	@Test
+	public void messageLeavesOutTheTotalWhenItMatches()
+	{
+		assertEquals("Trawling net(s) reached 150 fish!", DeepSeaTrawling.fishCountMessage(150, 150));
 	}
 }

@@ -765,7 +765,8 @@ public class DeepSeaTrawling extends Plugin
                 }
                 if (reachedFishCountThreshold(fishBefore, fishQuantity, config.netFishCountThreshold(), totalNetSize)
                         && isNotifyGuardPassed()) {
-                    notifier.notify(config.notifyNetFishCount(), "Trawling net(s) have " + fishQuantity + " fish!");
+                    notifier.notify(config.notifyNetFishCount(),
+                            fishCountMessage(config.netFishCountThreshold(), fishQuantity));
                 }
 			}
 		}
@@ -986,6 +987,17 @@ public class DeepSeaTrawling extends Plugin
                 && fishBefore < threshold
                 && fishAfter >= threshold
                 && fishAfter < totalNetSize;
+    }
+
+    /**
+     * Catches add several fish at once, so the nets usually pass the chosen count rather than
+     * land on it. Name the chosen count first, so the alert does not look late.
+     */
+    static String fishCountMessage(int threshold, int fishInNets) {
+        if (fishInNets == threshold) {
+            return "Trawling net(s) reached " + threshold + " fish!";
+        }
+        return "Trawling net(s) reached " + threshold + " fish (" + fishInNets + " now)!";
     }
 
     public boolean isNotifyGuardPassed() {
