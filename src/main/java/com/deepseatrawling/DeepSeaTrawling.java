@@ -1,7 +1,8 @@
 package com.deepseatrawling;
 
 import com.google.gson.Gson;
-import com.google.gson.reflect.TypeToken;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
 import com.google.inject.Provides;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
@@ -26,7 +27,6 @@ import net.runelite.client.util.ImageUtil;
 import javax.inject.Inject;
 import java.awt.*;
 import java.awt.image.BufferedImage;
-import java.lang.reflect.Type;
 import java.util.*;
 import java.util.List;
 
@@ -1123,17 +1123,9 @@ public class DeepSeaTrawling extends Plugin
         String json = configManager.getRSProfileConfiguration(CONFIG_GROUP, FISH_COUNTS_KEY);
         if (json == null) return;
 
-        Type type = new TypeToken<Map<String, Integer>>(){}.getType();
-        Map<String, Integer> counts = gson.fromJson(json, type);
-        if (counts == null) return;
-
-        String holdJson = configManager.getRSProfileConfiguration(CONFIG_GROUP, FISH_HOLD_COUNTS_KEY);
-        Map<String, Integer> holdCounts = holdJson != null ? gson.fromJson(holdJson, type) : new HashMap<>();
-        if (holdCounts == null) holdCounts = new HashMap<>();
-
-        String inventoryJson = configManager.getRSProfileConfiguration(CONFIG_GROUP, FISH_INVENTORY_COUNTS_KEY);
-        Map<String, Integer> inventoryCounts = inventoryJson != null ? gson.fromJson(inventoryJson, type) : new HashMap<>();
-        if (inventoryCounts == null) inventoryCounts = new HashMap<>();
+        Map<String, Integer> counts = parseCounts(json);
+        Map<String, Integer> holdCounts = parseCounts(configManager.getRSProfileConfiguration(CONFIG_GROUP, FISH_HOLD_COUNTS_KEY));
+        Map<String, Integer> inventoryCounts = parseCounts(configManager.getRSProfileConfiguration(CONFIG_GROUP, FISH_INVENTORY_COUNTS_KEY));
 
         for (Map.Entry<String, Integer> entry : counts.entrySet()) {
             String fishName = entry.getKey();
@@ -1153,6 +1145,24 @@ public class DeepSeaTrawling extends Plugin
             infoBoxManager.addInfoBox(infoBox);
         }
         log.debug("Loaded fish counts: {} hold: {} inventory: {}", counts, holdCounts, inventoryCounts);
+    }
+
+    // Reads a saved {"fish name": count} object. Gson's TypeToken is reflection, which the
+    // Plugin Hub does not allow, so the object is walked by hand instead.
+    private Map<String, Integer> parseCounts(String json) {
+        Map<String, Integer> counts = new HashMap<>();
+        if (json == null) return counts;
+
+        JsonObject object = gson.fromJson(json, JsonObject.class);
+        if (object == null) return counts;
+
+        for (Map.Entry<String, JsonElement> entry : object.entrySet()) {
+            JsonElement value = entry.getValue();
+            if (value.isJsonPrimitive() && value.getAsJsonPrimitive().isNumber()) {
+                counts.put(entry.getKey(), value.getAsInt());
+            }
+        }
+        return counts;
     }
 
     // Counts used to be saved once for every account. Hand any left over to the first account
