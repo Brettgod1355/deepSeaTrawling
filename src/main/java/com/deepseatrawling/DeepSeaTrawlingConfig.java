@@ -294,6 +294,15 @@ public interface DeepSeaTrawlingConfig extends Config
     default Notification notifyNetFull() { return Notification.ON; }
 
     @ConfigItem(
+            keyName = "notifyUnassignedBaitStation",
+            name = "Notify when bait station is unassigned",
+            description = "Shows a RuneLite notification when your nets are out and no crewmate is assigned to your chum station, advanced chum station or chum spreader",
+            position = 8,
+            section = notifSection
+    )
+    default Notification notifyUnassignedBaitStation() { return Notification.OFF; }
+
+    @ConfigItem(
             keyName = "notifyDepthChange",
             name = "Notify when shoal depth changes",
             description = "Shows a RuneLite notification when the rendered shoal's depth changes",

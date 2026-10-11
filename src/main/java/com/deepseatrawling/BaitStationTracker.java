@@ -11,6 +11,7 @@ import net.runelite.api.events.GameTick;
 import net.runelite.api.gameval.DBTableID;
 import net.runelite.api.gameval.VarPlayerID;
 import net.runelite.api.gameval.VarbitID;
+import net.runelite.client.Notifier;
 import net.runelite.client.eventbus.Subscribe;
 
 import javax.inject.Inject;
@@ -31,6 +32,9 @@ public class BaitStationTracker
 {
     /** The first crew position that is a hotspot; positions below it are the sails, helm and hull. */
     static final int FIRST_HOTSPOT_POSITION = 6;
+
+    /** Ticks the station must stay unassigned before the notification fires, once. */
+    static final int NOTIFY_AFTER_TICKS = 2;
 
     /** In the boat table's hotspot column, (coord, int, int, hotspot row): the hotspot row's field. */
     private static final int HOTSPOT_ROW_FIELD = 3;
@@ -73,6 +77,15 @@ public class BaitStationTracker
     @Inject
     private DeepSeaTrawlingConfig config;
 
+    @Inject
+    private DeepSeaTrawling plugin;
+
+    @Inject
+    private Notifier notifier;
+
+    /** How many ticks in a row the station has had nobody on it while the nets are out. */
+    private int unassignedTicks;
+
     /** Bait station objects on the player's own boat. */
     private final List<GameObject> stations = new ArrayList<>();
 
@@ -84,6 +97,7 @@ public class BaitStationTracker
     {
         stations.clear();
         unassignedStations.clear();
+        unassignedTicks = 0;
     }
 
     @Subscribe
@@ -111,11 +125,19 @@ public class BaitStationTracker
     public void onGameTick(GameTick tick)
     {
         unassignedStations.clear();
-        if (!config.highlightUnassignedBaitStation() || stations.isEmpty() || !netsDeployed()) return;
+        boolean watching = config.highlightUnassignedBaitStation() || config.notifyUnassignedBaitStation().isEnabled();
+        boolean unassigned = watching && !stations.isEmpty() && netsDeployed() && !isBaitStationCrewed();
+        unassignedTicks = unassigned ? unassignedTicks + 1 : 0;
 
-        if (!isBaitStationCrewed())
+        if (unassigned && config.highlightUnassignedBaitStation())
         {
             unassignedStations.addAll(stations);
+        }
+
+        // Moving a crewmate between jobs can leave the station empty for a tick, so wait before notifying
+        if (unassignedTicks == NOTIFY_AFTER_TICKS && plugin.isNotifyGuardPassed())
+        {
+            notifier.notify(config.notifyUnassignedBaitStation(), "Your bait station has no crewmate assigned!");
         }
     }
 
